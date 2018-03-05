@@ -1,0 +1,44 @@
+<project
+	name="Aberoth Parameter Launcher"
+	basedir="."
+	default="build"
+>
+	<property name="srcDir" value="src/launcher"/>
+	<property name="classDir" value="bin/launcher"/>
+	<property name="jarfile" value="ParamLauncher.jar"/>
+	<property name="gameclient" value="AberothClient.jar"/>
+	
+	<target name="build">
+		<mkdir dir="${classDir}"/>
+		<javac 
+			srcdir="${srcDir}"
+			destDir="${classDir}"
+			debug="true"
+			includeAntRuntime="false"
+			classpath=".;${gameclient}"
+		/>
+		<jar 
+			destfile="${jarfile}"
+			basedir="${classDir}"
+		>
+			<manifest>
+				<attribute name="Main-class" value="ParamLauncher"/>
+				<attribute name="Class-path" value="${gameclient}"/>
+				<attribute name="Extension-name" value=""/>
+			</manifest>
+			<service type="java.util.spi.ResourceBundleControlProvider" provider="DummyProvider"/>
+		</jar>
+	</target>
+	
+	<target name="clean">
+		<delete dir="${classDir}"/>
+	</target>
+	
+	<target name="feierabend" description="Last build for the day :)">
+		<antcall target="clean"/>
+		<antcall target="build"/>
+		<echo level="info" message="================="/>
+		<echo level="info" message="   Feierabend!"/>
+		<echo level="info" message="================="/>
+	</target>
+</project>

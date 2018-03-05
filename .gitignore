@@ -1,3 +1,6 @@
 /Documents/**
-!/Documents/protocol.pdf
+!/Documents/*.pdf
+
+bin
+AberothClient.jar
 
