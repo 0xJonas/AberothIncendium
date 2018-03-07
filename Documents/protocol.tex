@@ -1,0 +1,754 @@
+\documentclass{article}
+\usepackage{xcolor}
+
+\definecolor{fieldColor}{RGB}{160, 26, 204}
+\newcommand{\field}[1]{\textcolor{fieldColor}{\texttt{#1}}}
+
+\newenvironment{bytelisting}
+{\ttfamily \begin{center} \begin{tabular}{l l l} Offset & Description & Data type \\ \hline}
+{\normalfont \end{tabular} \end{center}}
+
+\begin{document}
+\title{The Aberoth Protocol}
+\author{Delphi1024}
+\maketitle
+
+\section{Disclaimer}
+Please use the information contained in this document responsibly.\\
+This document is highly incomplete and speculative. Expect corrections and additions in the future. 
+
+\section{Data Type Conventions}
+Various data types are used in this document for clarifying the contents of the server messages and commands. These include basic types like single bytes as well as more complex ones like strings.
+The following section declares these data types:
+\begin{description}
+\item [byte] A single eight-bit byte
+\item [short] Two bytes in a row stored in big endian format (most significant byte first)
+\item [int] Four bytes in a row stored in big endian format
+\item [String] A String of characters. A String is stored by first storing the length of the String as a short and then following it up with the actual characters.
+\item [Command] A Command is a sequence of bytes that cause the client to execute various actions. Each command starts with an identifier that identifies it.
+The length of the byte sequence is determined by the type of the command.
+\item [Command List] A List of commands for the client. The list starts with a three byte value in big endian format specifying the length of the list. This field is followed by the 
+actual commands.
+\item [Data] A representative type for any number of bytes. This type is used when the content of the data is not relevant in the current context.
+\end{description}
+
+%=========================================
+
+\section{Protocol Structure}
+The basic protocol structure consists of chunks which contain the server messages. Each chunk begins with the \field{compressionFlag} followed by two bytes stating the length of the following data.
+Depending on the value of the \field{compressionFlag}, this data might be ZIP-compressed. If the \field{compressionFlag} has the value 0xff, the data is sent uncompressed otherwise ZIP-compression is used.
+In the last case, the \field{compressionFlag} is also used as part of the \field{messageSize} field.
+
+\begin{bytelisting}
+0x0000 & \field{messageSize} MSB or \field{compressionFlag} & byte \\
+0x0001 & \field{messageSize} middle byte & byte\\
+0x0002 & \field{messageSize} LSB & byte\\
+0x0004 & message data & Data\\
+\end{bytelisting}
+
+The message data follows a similarly simple pattern: The first byte is used to identify the type of message, since each message has a unique Id.
+The different messages are covered in detail in a later part of this document.
+
+\begin{bytelisting}
+0x0000 & Message identifier & byte \\
+0x0001 & Message content & Data\\
+\end{bytelisting}
+
+\subsection{Logging in}
+There is one exception to the above structure, which is the login handshake. To log in, the client sends all the required information to the server in form of a single string.
+The string consists of multiple smaller strings which are seperated by the NULL (u+0000) character. The login string contains the following substrings, in the given order:
+
+\begin{description}
+\item [\field{playerName}] The name of the account that is used to log in.
+\item [\field{password}] The password of the account that is used to log in. The password is either sent in plain text, or the string "encryptMD5" is used, which causes the server to request 
+a salted MD5 hash of the password. Neither option is particularly secure.
+\item [\field{screenDefinition}] A numeric value determining the screen definition that should be used. The screen definition specifies the size of the main window before it is scaled. 
+If this value is "1" then a widescreen resolution of 960x540 is used. A value of "0" or "-1" will set the resolution to 640x480. Any other value will cause the server to respond with a message
+explaining that the screen definition is invalid.
+\item [\field{scaleNumerator}] The numerator of the scale factor that is used to scale the main window. The scale factor is represented as a fraction with the numerator and denominator saved 
+separately.
+\item [\field{scaleDenominator}] The denominator of the scale factor.
+\item [\field{fontSize}] The selected font size.
+\item [\field{systemArchitecture}] A string describing the User's system architecture. This includes the operating system and version, as well as the CPU architecture. While the Java client actually
+audits the system properties for this information, the HTML5 client sets this field to the string "Windows".
+\item [\field{javaEnvironment}] A string describing the User's java environment. It consists of the Java version as well as the manufacturer of the Java virtual machine.
+\item [\field{unknown}] An unknown boolean ("true" or "false") string. It is set to "true" by the Java client and "false" by the HTML5 client.
+\item [\field{hardwareAcceleration}] A boolean string determining if hardware acceleration is available on the User's machine. 
+\item [\field{graphicsMemory}] The amount of available graphics card memory. Since this value is meaningless when no hardware acceleration is selected or available, it is set to 0 in these cases.
+\item [\field{signature}] A boolean string verifying that the used client has a valid signature. Both the Java and the HTML5 client set this value to "true" without checking though...
+\end{description}
+
+After the login string has been sent, the server will respond with a number that describes the status of the login attempt. The server will follow that number up with a null-terminated string that contains additional
+data. The following status values are accepted by the client:
+
+\begin{itemize}
+\item A value of 0 indicates that an error has occured during the login. The data string can contain some memorable and helpful lines such as "Error! Please and try again later" [sic].
+\item A value of 1 means that the login was successful. After this message, the server will start sending messages in the stardard protocol structure.
+\item A value of 2 means that the message inside the data string should be displayed to the player.
+\item A value of 3 means that the server is full and the player is queued up to enter.
+\item A value of 4 means that the server is full and too many players are already queued up.
+\item A value of 5 is sent if the value of the \field{password} field was "encryptMD5". This value requests the MD5 hash of the password to be sent to the server. The server also sends a hash salt in the data string
+that should be appended to the password before hashing. The resulting hash should be encoded in hexadecimal form and is send to the server. After the hash has been sent, the server will send a new status update.
+\end{itemize}
+
+The status values 2, 3 and 4 display a message box to the player. Dismissing the message will cause the client to check if the server has sent a new status update. If this is the case, the status value is interpreted
+as explained above. Otherwise the login attempt is canceled. If the status value is 0, the login attempt is immediately canceled and no message is displayed.
+
+\subsection{Special Player Names}
+Some values for the \field{playerName} field trigger a special behaviour by the server:
+
+\subsubsection{New Character Creation}
+When creating a new character, the client crafts a special string for the \field{playerName}, which contains some initial parameters for the new character. The string consists entirely of the ASCII characters
+0-9. It starts with 27 pseudorandom numbers, presumably to create a unique identifier for the character before it is named. It is followed by the starting realm of the character, the initial hair color,
+skin color, shirt color and, finally, gender. The specific values for each are listed below.
+
+\begin{center}
+
+\begin{tabular}{c l}
+\textbf{Value} & \textbf{Gender} \\
+1 & Random \\
+2 & Male \\
+3 & Female \\
+other & Random\\
+\end{tabular}
+\\ \vspace{14pt}
+\begin{tabular}{c l}
+\textbf{Value} & \textbf{Shirt Color } \\
+1 & Random \\
+2 & Red \\
+3 & Orange \\
+4 & Yellow \\
+5 & Green \\
+6 & Blue \\
+7 & Purple \\
+other & Random \\
+\end{tabular}
+\\ \vspace{14pt}
+\begin{tabular}{c l}
+\textbf{Value} & \textbf{Skin Color} \\
+1 & Random \\
+2 & Light \\
+3 & Medium \\
+4 & Dark \\
+other & Random \\
+\end{tabular}
+\\ \vspace{14pt}
+\begin{tabular}{c l}
+\textbf{Value} & \textbf{Hair Color} \\
+1 & Random \\
+2 & Light \\
+3 & Medium \\
+4 & Dark \\
+5 & Very Dark \\
+other & Random \\
+\end{tabular}
+\\ \vspace{14pt}
+\begin{tabular}{c l}
+\textbf{Value} & \textbf{Starting Realm} \\
+1 & White/Knowledge \\
+2 & Black/Power \\
+3 & Green/Thought \\
+4 & Red/Life \\
+5 & Purple/Change \\
+6 & Yellow/Creation \\
+7 & Cyan/Protection \\
+8 & Blue/Deceit \\
+other & Random \\
+\end{tabular}
+\end{center}
+
+%=========================================
+
+\section{Client and Server Messages}
+
+\subsection{CREATE\_WINDOW Message}
+The CREATE\_WINDOW message is usually the first server message sent after successfully logging in. It specifies the dimensions of the main window as well as which event listeners to enable.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x14 (Identifier) & byte \\
+0x0001 & windowId & byte \\
+0x0002 & title & String \\
+0x00nn & screenWidth & short \\
+0x00nn + 2 & screenHeight & short \\
+0x00nn + 4 & events & byte \\
+\end{bytelisting}
+
+When this message is received the \field{screenWidth} and \field{screenHeight} fields are taken as the basis of the main window dimension. To construct the main window, these fields are scaled with the
+scale factor that was set in the login message. While the screen dimensions may be set arbitrarily, the game will still only send rendering commands conforming to the screen definition set in the
+login message. This will cause the screen to be cropped when the dimensions are smaller than the required screen definiton and render artifakts on the blank space when the screen dimensions are too big.
+
+The \field{windowId} field assigns an Id to the window. This Id is used to later associate user input events with the current play session.
+
+The \field{events} field of this message decides which event listeners are enabled. A value of 0 means that only keyboard events are listened for. A value of 1 only listenes for mouse clicks and mouse movements.
+A value of 2 listens for keyboard events and mouse clicks, while a value of 3 also listenes for mouse movement. Finally any other value will cause the client to only listen for keyboard and mouse click
+events, but not for mouse movement.
+
+\subsection{ONE\_FRAME\_NO\_INFO Message}
+This message containes a list of commands to render one frame. They are executed in the order they are received.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x0c & byte \\
+0x0001 & List of rendering commands & Command List \\
+\end{bytelisting}
+
+\subsection{ONE\_FRAME\_WITH\_INFO Message}
+The ONE\_FRAME\_WITH\_INFO message is similar to the \\
+ONE\_FRAME\_NO\_INFO message except that it also tests the users connection.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x17 & byte \\
+0x0001 & List of rendering commands & Command List \\
+0x00nn & PING\_ID\_BANDWIDTH\_CHECK Command & Command \\
+\end{bytelisting}
+
+This message ends with a PING\_ID\_BANDWIDTH\_CHECK command which causes the client to respond with a FRAME\_RECEIVED message, sending a larger amount of data to the server, for connection testing.
+It is important to note that the PING\_ID\_BANDWIDTH\_CHECK command is not part of the command list and is therefore not included in the command lists length field.
+
+\subsection{USER\_INPUT Message}
+The USER\_INPUT Message is used send user input to the server.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x0e & byte \\
+0x0001 & \field{windowId} & byte \\
+0x0002 & \field{inputCommands} & Command list \\
+\end{bytelisting}
+
+The \field{windowId} must be the same id that got associated with the current play session by the CREATE\_WINDOW message. 
+
+The command list in this message consists entirely of MOUSE\_INPUT and KEYBOARD\_INPUT commands. While this list can contain any number of commands, in practice the client will send a USER\_INPUT message
+as soon as the input occurs. This causes the list to always contain exactly one command.
+
+\subsection{FRAME\_RECEIVED Message}
+The FRAME\_RECEIVED Message is sent by the client in response to a \\
+PING\_ID\_BANDWIDTH\_CHECK command.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x0d & byte \\
+0x0001 & \field{trigger} & Command \\
+0x0005 & lots of data & Data \\
+\end{bytelisting}
+
+The \field{trigger} field contains the PING\_ID\_BANDWIDTH\_CHECK command that this message is responding to. The actual data sent consists of a sequence of pseudorandom numbers with a length given 
+by the \field{echoLength} field of the PING\_ID\_BANDWIDTH\_CHECK command.
+
+\subsection{CLIENT\_STATUS Message}
+The CLIENT\_STATUS Message is sent by the client every 30 seconds to show the server that the connection has not been terminated.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x16 & byte \\
+0x0001 & \field{status} & short\\
+\end{bytelisting}
+
+The \field{status} field is usually set to 65000, which is interpreted as a heartbeat by the server. Effects of other values are not known.
+
+%===========================================
+
+\section{Rendering Concepts}
+To better understand the commands used by the client and server, it is important to know some of the rendering concepts that are used.
+
+\subsection{The Main Window}
+The window is the main visible part of a play session. While it holds many parameters that influence the rendering process, all the actual rendering is done in the subwindows.
+The task of the window is therefore to manage these subwindows.
+
+These are the properties of the main window:
+\begin{description}
+\item [\field{windowId}] A unique Id assigned to the main window when it is created by the CREATE\_WINDOW message. It is used to bind user inputs to this window.
+\item [\field{subwindows}] This is the array of subwindows. All subwindows that are creates get stored in this array.
+\item [\field{activeSubwindow}] The Id of the currently active subwindow. The active subwindow is the one that receives all rendering commands.
+\item [\field{previousSubwindow}] The Id of the subwindow that was active before the last subwindow switch. This is required to make the \\ SWITCH\_BACK\_TO\_PREVIOUS\_SUB\_WINDOW command work.
+\item [\field{width}] The width of the window, before any scale factors are applied. 
+\item [\field{height}] The height of the window, before any scale factors are applied.
+\item [\field{scaleFactor}] The factor to scale the main window with. This can be set in the login dialog or the HTML5 client's options.
+\item [\field{cursorX}] The x-coordinate of the drawing cursor position. This position is interpreted as being in the active subwindow's coordinate system. The cursor position is used by the DRAW\_FILLED\_RECT
+commands to determine where a rectangle should be drawn.
+\item [\field{curosrY}] The y-coordinate of the drawing cursor position. This position is interpreted as being in the active subwindow's coordinate system.
+\item [\field{colorCache}] An array that stores various colors used throughout the rendering process.
+\item [\field{resourceCache}] This field is an associative array that contains all external resources used by the window. These resource include images and sound effects.
+\end{description}
+
+\subsection{Subwindows}
+The subwindows are what receive the rendering commands. All subwindows are arranged in a stack by the main window to form a frame. The subwindows with higher \field{subwindowId}s will be at
+the top and can overlap lower subwindows.
+Each subwindow has the following properties:
+
+\begin{description}
+\item [\field{subwindowId}] The unique Id of this subwindow. This id is used to reference this subwindow in various commands. The highest valid Id is 255.
+\item [\field{xPosition}] The x-position of this subwindow in the main window's coordinates. The position of a subwindow can only be set once when it is created an can not be changed afterwards.
+\item [\field{yPosition}] The y-position of this subwindow in the window's coordinates.
+\item [\field{width}] The width of the subwindow. It can only be set once when the subwindow is created.
+\item [\field{height}] The height of the subwindow.
+\item [\field{rectangleWidth}] The width of a rectangle that is rendered using one of the DRAW\_FILLED\_RECT commands.
+\item [\field{rectangleHeight}] The height of a rectangle that is rendered using one of the DRAW\_FILLED\_RECT commands.
+\item [\field{roundingX}] Rounding behaviour in x-direction. This field determines what happends when a scaling operation in x-direction does not result in an integer value. See the SET\_FILLED\_RECT\_SIZE
+command for details.
+\item [\field{roundingY}] Rounding behaviour in y-direction.
+\item [\field{textCache}] An associative array containing all the text strings that are currently visible on this subwindow.
+\end{description}
+
+%===========================================
+
+\section{Commands}
+
+\subsection{PING\_ID\_BANDWIDTH\_CHECK Command}
+This Command requests the client to send a somewhat larger amount of data back to the server to check the connection and test the bandwidth of the user. The actual data send is just 
+pseudorandom numbers.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x0b & byte \\
+0x0001 & unknown/unused & byte \\
+0x0002 & unknown/unused & byte \\
+0x0003 & \field{echoLength} & byte \\
+\end{bytelisting}
+
+The \field{echoLength} field determines how long the response to this command should be. A value of 1 means that the response should be 1 kiB (1024 Byte) in length. A
+value of 2 means the length should be 2 kiB (2048 Byte) and a value of 3 means 4 kiB (4096 Byte). Any other value causes the length to be 0 and an empty FRAME\_RECEIVED message will be sent.
+The only exception to this is when the \field{echoLength} field itself is 0, in which case no respose will be sent.
+
+\subsection{DRAW\_FILLED\_RECT\_AT\_Y\_PLUS\_ONE Command}
+This is one of the many commands that draw a rectangle on the screen. This variant moves the drawing cursor down one step and then fills a rectangle of the previously set size with the active subwindow's 
+current color.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x00 & byte \\
+\end{bytelisting}
+
+\subsection{DRAW\_FILLED\_RECT\_AT\_X\_PLUS\_ONE Command}
+This command is similar to the previous one except the drawing cursor is moved one step to the right instead of down before filling the rectangle.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x03 & byte \\
+\end{bytelisting}
+
+\subsection{DRAW\_FILLED\_RECT\_AT\_DY Command}
+Another of the DRAW\_FILLED\_RECT variants this time with a variable step size. This command moves the drawing cursor down \field{delta} number of steps and then fills a rectangle the current color.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x02 & byte \\
+0x0000 & \field{delta} & byte \\
+\end{bytelisting}
+
+\subsection{DRAW\_FILLED\_RECT\_AT\_DX Command}
+The equivalent of the previous command for jumping to the right instead of down.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x04 & byte \\
+0x0000 & \field{delta} & byte \\
+\end{bytelisting}
+
+\subsection{DRAW\_FILLED\_RECT\_AT\_BLOCK\_XY Command}
+This command sets the drawing cursor to the location specified by its \field{xPosition} and \field{yPosition} fields, then renders a rectangle at that location.
+The \field{xPosition} and \field{yPosition} fields are multiplied by the currently set rectangle dimensions before jumping.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x01 & byte \\
+0x0001 & \field{xPosition} & byte \\
+0x0002 & \field{yPosition} & byte \\
+\end{bytelisting}
+
+\subsection{DRAW\_FILLED\_RECT\_AT\_XY Command}
+This command is similar to the previous one, except that the \field{xPosition} and \field{yPosition} fields are not adjusted for the current rectangle size before jumping.
+This allows for rectangles to be rendered \"between pixels\".
+
+\begin{bytelisting}
+0x0000 & Constant value 0x01 & byte \\
+0x0001 & \field{xPosition} & short \\
+0x0002 & \field{yPosition} & short \\
+\end{bytelisting}
+
+Note that the data type for the \field{xPosition} and \field{yPosition} fields is a short, instead of a byte like the previous command.
+
+\subsection{DRAW\_FILLED\_RECT\_AT\_Y\_PLUS\_ONE\_REPEAT \\ Command}
+This command is similar to the DRAW\_FILLED\_RECT\_AT\_Y\_PLUS\_ONE command, except that that the command is repeated multiple times.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x1b & byte \\
+0x0000 & \field{repCount} & byte \\
+\end{bytelisting}
+
+This command executes a DRAW\_FILLED\_RECT\_AT\_Y\_PLUS\_ONE command as many times as specified by the \field{repCount} field.
+
+\subsection{SET\_FILLED\_RECT\_SIZE Command}
+The SET\_FILLED\_RECT\_SIZE Command sets the size of the rectangles that are rendered by the DRAW\_FILLED\_RECT commands.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x19 & byte \\
+0x0001 & \field{width} & short \\
+0x0003 & \field{height} & short \\
+0x0005 & \field{rounding} & byte \\
+\end{bytelisting}
+
+The \field{width} and \field{height} fields specify the width and height of the rectangles that should be rendered by subsequent DRAW\_FILLED\_RECT commands. Like most other dimensions, they are given
+without any scale factors applied. To get the actual dimensions of the rectangle, these fields have to be scaled by the scale factor from the login message.
+
+The \field{rounding} field determines what should happend when applying the scale factor does not result in an integer value. This field is a bitfield, containing the rounding behaviour in 
+x-direction as well as in y-direction. If the first bit (LSB) of the bitfield is set, scaling operation in x-direction should always round up to the nearest integer, otherwise they should be
+rounded down. The second bit specifies the rounding behaviour in the same way for scaling operations in y-direction.
+
+\subsection{DRAW\_PIXEL Command}
+The DRAW\_PIXEL command sets any pixel of the active subwindow to the subwindows current rendering color.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x12 & byte \\
+0x0001 & \field{xPosition} & short \\
+0x0003 & \field{yPosition} & short \\
+\end{bytelisting}
+
+The pixel affected is given by the \field{xPosition} and \field{yPosition} fields.
+
+\subsection{COPY\_AREA Command}
+The COPY\_AREA Command copies the image data from one position on the active subwindow to another.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x15 & byte \\
+0x0001 & \field{sourceX} & short \\
+0x0003 & \field{sourceY} & short \\
+0x0005 & \field{width} & short \\
+0x0007 & \field{height} & short \\
+0x0009 & \field{destinationX} & short \\
+0x000b & \field{destinationY} & short \\
+0x000d & \field{destinationXSign} & byte \\
+0x000f & \field{destinationYSign} & byte \\
+\end{bytelisting}
+
+This command copies the area at position (\field{sourceX}, \field{sourceY}) with the dimensions specified by the \field{width} and \field{height} fields and pastes it at the position 
+(\field{destinationX}, \field{destinationY}). The sign bits (\field{destinationXSign} and \field{destinationYSign})specify wether the destination fields should be treated as negative values.
+A sign bit of 0 means the corresponding destination field should be used as is while a sign bit other then 0 means that it should be negated.
+
+\subsection{SET\_COLOR Command}
+The SET\_COLOR command sets the rendering color of the current subwindow.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x06 & byte \\
+0x0001 & \field{red} & byte \\
+0x0002 & \field{green} & byte \\
+0x0003 & \field{blue} & byte \\
+\end{bytelisting}
+
+This command sets the rendering color of the active subwindow to the one supplied with the command. This causes all subsequent DRAW\_FILLED\_RECT commands to use this color.
+
+\subsection{SET\_COLOR\_WITH\_ALPHA Command}
+The SET\_COLOR\_WITH\_ALPHA command also sets the rendering color of the current subwindow, but has the capability to include an alpha (transparency) value in the color.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x1d & byte \\
+0x0001 & \field{red} & byte \\
+0x0002 & \field{green} & byte \\
+0x0003 & \field{blue} & byte \\
+0x0003 & \field{alpha} & byte \\
+\end{bytelisting}
+
+\subsection{CACHE\_CURRENT\_COLOR Command}
+This command creates a new entry in the color cache for the current color of the active subwindow.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x07 & byte \\
+0x0001 & \field{cacheId} & byte \\
+\end{bytelisting}
+
+The \field{cacheId} is used to reference the color in subsequent commands.
+
+\subsection{SET\_COLOR\_BASED\_ON\_CACHE Command}
+This command takes a color from the cache and modifies it slightly. This is the only command that makes use of the cached colors.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x1c & byte \\
+0x0001 & \field{cacheId} & byte \\
+0x0002 & \field{colorDelta} & byte \\
+\end{bytelisting}
+
+The \field{cacheId} field states which color from the color cache should be used as a basis for the color modification.
+
+The \field{colorDelta} field is a bitfield specified how to modify the color. The red value of the color is modified by taking the three most significant bits of the delta field and subtracting 4 from them.
+The result is than added to the red value. The green value is modified the same way, but bits 3,4 and 5 are used instead. The blue value is modified by taking the two least 
+significant bits and subtraction 2 from them. The result is then added to the blue value.
+
+To load a color from the cache without changing it, the \field{colorDelta} field must have the value 0x92, which causes all the above calculations to add 0 to the color values.
+
+\subsection{SET\_ON\_SCREEN\_TEXT Command}
+The SET\_ON\_SCREEN\_TEXT command displays text on the active subwindow.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x08 & byte \\
+0x0001 & \field{textId} & short \\
+0x0003 & \field{xPosition} & short \\
+0x0005 & \field{yPosition} & short \\
+0x0007 & \field{lineShift} & byte \\
+0x0008 & \field{style} & byte \\
+0x0009 & \field{font} & byte \\
+0x000a & \field{textContent} & String\\
+\end{bytelisting}
+
+This command renders the text in the \field{textContent} field at the position given by the \field{xPosition}, \field{yPosition} and \field{lineShift} fields. The \field{xPosition} and \field{yPosition}
+fields set the point where the text is anchored on the subwindow and the \field{lineShift} field indicates how many lines the first line of text should be rendered above the anchor point. The \field{lineShift}
+field does not have to match the actual line count of the text.
+
+The \field{font} field lets the server decide which font to use. In practice, this field chooses between three identical fonts on the Java client and is ignored completely on the HTML5 client.
+
+Setting the \field{textContent} field to the empty string will remove the text from the active subwindow.
+
+The \field{style} field specifies the style that the text should be rendered in. A value of 0 indicates plain text. A value of 1 renderes the text in \textit{italics}, while a value of 2 causes the text to
+be rendered \textbf{bold}. Finally a value of 3 causes the text to be rendered in a smaller font with no special styling applied to it.
+
+The \field{textId} field is used to reference the text in a later \\
+MOVE\_ON\_SCREEN\_TEXT Command. Some values of \field{textId} also carry a special meaning with them:
+\begin{itemize}
+\item A value of 0 causes all text on the active subwindow to be cleared, with the exception of broadcast messages.
+\item A value of 2 will cause the text to be displayed in the bottom-left corner of the active subwindow. The text will also always be rendered white, regardless of the subwindow's current color. 
+This \field{textId} is used to display the players stats.
+\item A value of 3 will cause the text to be displayed in the bottom-left corner of the active subwindow. The text will also always be rendered yellow, regardless of the subwindow's current color.
+This \field{textId} is used to display hint messages.
+\item A value of 4 indicates a broadcast message. It is always displayed at the top in the center of the active subwindow and can not be cleared.
+\item A value of 65001 indicates a status text. This text will always be rendered white and will always be displayed in the top-left.
+\item A value of 65535 will lock the \field{yPosition} field to be the center of the active subwindow. The \field{xPosition} field is unaffected.
+\end{itemize}
+
+\subsection{MOVE\_ON\_SCREEN\_TEXT Command}
+The MOVE\_ON\_SCREEN\_TEXT command will update the position of text on the active subwindow.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x08 & byte \\
+0x0001 & \field{textId} & short \\
+0x0003 & \field{xPosition} & short \\
+0x0005 & \field{yPosition} & short \\
+0x0007 & \field{lineShift} & byte \\
+\end{bytelisting}
+
+This command is basically the same as the SET\_ON\_SCREEN\_TEXT command, but instead of supplying a string, it reuses the one with the given \field{textId}.
+
+\subsection{SUB\_WINDOW commands}
+The SUB\_WINDOW commands are commands that manage the main windows subwindows. The commands have a similar structure in that they all start with the constant 0x18, followed by a value that identifies
+the subcommand. Finally, they all contain the Id of the subwindow that they operate on.
+
+\subsubsection{CREATE\_SUB\_WINDOW Command}
+The CREATE\_SUB\_WINDOW command creates a new subwindow and adds it to the main window's subwindow list. The active subwindow will also be set to this new subwindow.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x18 & byte \\
+0x0001 & Constant value 0x00 & byte \\
+0x0002 & \field{subwindowId} & byte \\
+0x0003 & \field{xPosition} & short \\
+0x0005 & \field{yPosition} & short \\
+0x0007 & \field{width} & short \\
+0x0009 & \field{height} & short \\
+\end{bytelisting}
+
+This command creates a subwindow with the id \field{subwindowId} and adds it to the main windows list of subwindows. If a subwindow with the given id already exists, it is discarded 
+the same way as by a DESTROY\_SUB\_WINDOW command.
+
+The \field{xPosition} and \field{yPosition} fields determine the offset of the subwindow to the main windows origin. The \field{width} and \field{height} fields similary specify the 
+dimensions of the new subwindow.
+
+\subsubsection{SWITCH\_TO\_SUB\_WINDOW Command}
+This command changes the active subwindow to the one specified by the \\ \field{subwindowId} in this command.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x18 & byte \\
+0x0001 & Constant value 0x01 & byte \\
+0x0002 & \field{subwindowId} & byte \\
+\end{bytelisting}
+
+After this command has been processed, the subwindow with the specified \field{subwindowId} will be active. The Id of the previously active subwindow is saved in case of a subsequent
+SWITCH\_BACK\_TO\_PREVIOUS\_SUB\_WINDOW command.
+
+\subsubsection{SWITCH\_BACK\_TO\_PREVIOUS\_SUB\_WINDOW Command}
+This command returns to the subwindow that was active before the last \\
+SWITCH\_TO\_SUB\_WINDOW command.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x18 & byte \\
+0x0001 & Constant value 0x02 & byte \\
+0x0002 & \field{subwindowId} (Not used) & byte \\
+\end{bytelisting}
+
+This command makes the subwindow that was active before the last \\
+SWITCH\_TO\_SUB\_WINDOW command the active subwindow. However, like it saves the Id of the currently active subwindow, so the next \\
+SWITCH\_BACK\_TO\_PREVIOUS\_SUB\_WINDOW command will undo this command. Therefore, consecutive SWITCH\_BACK\_TO\_PREVIOUS\_SUB\_WINDOW messages will only switch back and forth between the 
+last two active subwindows.
+
+\subsubsection{DESTROY\_SUB\_WINDOW Command}
+This command removes a subwindow from the rendering pipeline and releases all system resources associated with it.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x18 & byte \\
+0x0001 & Constant value 0x03 & byte \\
+0x0002 & \field{subwindowId} & byte \\
+\end{bytelisting}
+
+The DESTROY\_SUB\_WINDOW command removes the subwindow with the given Id from the rendering process.
+
+While it is possible to destroy the currently active subwindow, the results of doing so may be unpredictable. The active subwindow always has a second reference pointing to it, which prevents it from being
+properly removed. Depending on the client (Java or HTML5), this can result in undefined behaviour.
+
+\subsection{USE\_GLOBAL\_RESOURCE Commands}
+These commands are used for everything that deals with additional resources, specifically images and sound effects. They come in six variants:
+
+\subsubsection{RESOURCE\_TYPE\_IMAGE\_NO\_DATA}
+This variant renders a previously cached image.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x1a & byte \\
+0x0001 & \field{resourceId} & short \\
+0x0003 & Constant value 0x00 & byte \\
+0x0004 & \field{xPosition} & short \\
+0x0006 & \field{yPosition} & short \\
+\end{bytelisting}
+
+This command renders the image specified by the \field{resourceId} at the given position.
+
+\subsubsection{RESOURCE\_TYPE\_PNG}
+This variant receives and renders a PNG encoded image.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x1a & byte \\
+0x0001 & \field{resourceId} & short \\
+0x0003 & Constant value 0x01 & byte \\
+0x0004 & \field{xPosition} & short \\
+0x0006 & \field{yPosition} & short \\
+0x0008 & \field{dataLength} & short \\
+0x000a & PNG file data & Data \\
+\end{bytelisting}
+
+This command receives a PNG file and saves it to the image cache using the given \field{resourceId}. It then renders the image at the position specified by the \field{xPosition} and \field{yPosition} fields. 
+
+\subsubsection{RESOURCE\_TYPE\_IMAGE\_RAW}
+Like the previous variant, this one receives an image, but this time it is sent as raw RGB values.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x1a & byte \\
+0x0001 & \field{resourceId} & short \\
+0x0003 & Constant value 0x05 & byte \\
+0x0004 & \field{xPosition} & short \\
+0x0006 & \field{yPosition} & short \\
+0x0008 & \field{dataLength} & short \\
+0x000a & Raw RGBA data & Data \\
+\end{bytelisting}
+
+This command's fields work exactly the same way as in the RESOURCE\_TYPE\_PNG subcommand. The RGBA data is formated in the following way:
+
+\begin{bytelisting}
+0x0000 & Image width & byte \\
+0x0001 & Image height & byte \\
+0x0002 & Red 1 & byte \\
+0x0003 & Green 1 & byte \\
+0x0004 & Blue 1 & byte \\
+0x0005 & Alpha 1 & byte \\
+... & ... & ... \\
+0x000m & Red n & byte \\
+0x000m & Green n & byte \\
+0x000m & Blue n & byte \\
+0x000m & Alpha n & byte \\
+\end{bytelisting}
+
+\subsubsection{RESOURCE\_TYPE\_SOUND\_EFFECT\_NO\_DATA}
+The RESOURCE\_TYPE\_SOUND\_EFFECT\_NO\_DATA subcommand plays a sound effect that has previously been cached.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x1a & byte \\
+0x0001 & \field{resourceId} & short \\
+0x0003 & Constant value 0x02 & byte \\
+0x0004 & \field{pan} & byte \\
+0x0005 & \field{volume} & byte \\
+0x0006 & \field{instanceId} & short \\
+\end{bytelisting}
+
+This command plays the sound effect with the given \field{resourceId}, applying the \field{volume} and \field{pan} position. The actual volume of the sound is calculated by linearly mapping the possible values of the 
+volume field (0-255) to the range from -80dB to +80dB. The interpretation of the \field{pan} field differs slightly between the HTML5 client and the Java client. The Java client interpretes a value of 0 as 
+80\% left and a value of 255 as 80\% right and interpolates linearly between those values. The HTML5 client uses the JS sound capabilities to position the sound at a point on a semicircle around the
+listener. A value of 0 means the sound is positioned 100\% to the left and a value of 255 means 100\% to the right.
+
+The \field{instanceId} is a secondary Id that is used to reference different instances of the sound during playback. It is not related to the \field{resourceId}.
+The \field{instanceId} allows the same sound effect to be played more than once at a time.
+
+\subsubsection{RESOURCE\_TYPE\_SOUND\_EFFECT}
+The RESOURCE\_TYPE\_SOUND\_EFFECT subcommand receives a sound effect and plays it.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x1a & byte \\
+0x0001 & \field{resourceId} & short \\
+0x0003 & Constant value 0x03 & byte \\
+0x0004 & \field{pan} & byte \\
+0x0005 & \field{volume} & byte \\
+0x0006 & \field{instanceId} & short \\
+0x0008 & \field{dataLength} & short \\
+0x000a & Sound effect name & Data \\
+\end{bytelisting}
+
+The pan position, volume and \field{resourceId} fields work exactly the same as in the previous subcommand.
+
+The sound effect name is the name of the file that the sound effect is loaded from. The way sound effects are loaded depends on the client implementation. The Java client first checks wether the sound
+file has already been downloaded in a previous session, in which case it loads that file from the local hard drive. The downloaded sounds are saved in the 'resource'-folder in the same directory that
+the client is stored in. If the client is unable to find the sound on the players hard drive, it proceeds to download the file with the corresponding name from the online resource folder located at
+www.aberoth.com/resource/. All sound effect files used by the Java client are in WAVE (.wav) format, but are encoded by XORing every byte with 0xb5 (181 decimal).
+
+The HTML5 client will always access the online resource folder. However, instead of WAVE files, it searches for OGG or MP3 files depending on the capabilities of the browser. When loading a file, the HTML5 client
+appends the appropriate file suffix (.ogg or .mp3) to the filename and loads that file from the www.aberoth.com/resource. These files are not encoded in any special way, making them playable in the browser:\\
+http://www.aberoth.com/resource/2bcb7e7590adadf0f7fd885d82b21c1e0.mp3
+
+\subsubsection{RESOURCE\_TYPE\_STOP\_SOUND\_EFFECT}
+The RESOURCE\_TYPE\_STOP\_SOUND\_EFFECT subcommand stops a currently playing sound effect.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x1a & byte \\
+0x0001 & \field{resourceId}& short \\
+0x0003 & Constant value 0x06 & byte \\
+0x0004 & \field{pan} (Not used) & byte \\
+0x0005 & \field{volume} (Not used) & byte \\
+0x0006 & \field{instanceId} & short \\
+\end{bytelisting}
+
+This command stops the sound with the given resource and instance Id.
+
+\subsection{MOUSE\_INPUT Command}
+The MOUSE\_INPUT Command represents a mouse action by the player, such as clicking or moving the cursor.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x13 & byte \\
+0x0001 & \field{subwindowId} & byte \\
+0x0002 & \field{mouseButton} & byte \\
+0x0003 & \field{action} & byte \\
+0x0004 & \field{xPosition} & short \\
+0x0006 & \field{yPosition} & short \\
+\end{bytelisting}
+
+The \field{subwindowId} field contains the Id of the subwindow that the mouse event occured in. This will always be set to the highest Id of the subwindows that the mouse event is contained in.
+
+The \field{mouseButton} field specifies which button on the mouse has been pressed, if any.
+
+The \field{action} field determines the kind of mouse interaction that the player performed. A value of 0 means that a mouse button has been pressed, a value of 1 means a button has been released,
+a value of 2 means that the mouse cursor has been moved and a value of 3 means that the mouse has been dragged (moved with a button held down).
+
+The \field{xPosition} and \field{yPosition} field specify the coordinate of the mouse event relative to the origin of the subwindow in which it occured. The fields are normalized, meaning
+they have to be divided by the scalefactor that was set in the login message, before they can be sent to the server.
+
+\subsection{KEYBOARD\_INPUT Command}
+The KEYBOARD\_INPUT command represents a key press.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x10 & byte \\
+0x0001 & \field{keyCode} & byte \\
+0x0002 & \field{action} & byte \\
+\end{bytelisting}
+
+The \field{keyCode} field contains a unique Id representing the key for this key event. The Ids are the same as the ones used by the java.awt.event.KeyEvent class.
+
+The \field{action} field specifies the type of interaction.
+\begin{itemize}
+\item A \field{action} value of 0 means that a key was pressed.
+\item A \field{action} value of 1 means that a previously held key was released.
+\item A \field{action} value of 2 means that a key was typed. This event is usually fired when the player is typing a text.
+\item A \field{action} value of 11 signals that a special action is performed which is unreleated to a key. The possible special actions are listed below.
+\item A \field{action} value of 12 signals that the character typed should go into a special buffer on the server which is used to store in-game speech.
+\end{itemize}
+
+There exist some special values for the \field{keyCode} field that are available when using \field{action} 11. They are put in place to make the mobile version of the HTML5 client easier to use, 
+but could theoretically be sent from any client:
+\begin{itemize}
+\item A \field{keyCode} value of 1 means that the player character should start attacking, similar as if the 'f'-key is held down.
+\item A \field{keyCode} value of 2 means that the player character should stop attacking.
+\item A \field{keyCode} value of 3 signals that from now on all mouse clicks should be interpreted as right clicks, similar as if the 'drop' checkbox is selected.
+\item A \field{keyCode} value of 4 means that the mouse click interpretation should go back to normale.
+\item A \field{keyCode} value of 5 signals that the player is about to say something.
+\item A \field{keyCode} value of 6 signals that the player character should speak the current contents of the speech buffer.
+\end{itemize}
+
+\end{document}

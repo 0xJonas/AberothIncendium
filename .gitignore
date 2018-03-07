@@ -1,5 +1,6 @@
 /Documents/**
 !/Documents/*.pdf
+!/Documents/*.tex
 
 bin
 AberothClient.jar
