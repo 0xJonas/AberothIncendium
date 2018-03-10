@@ -3,35 +3,34 @@
 	basedir="."
 	default="build"
 >
-	<property name="srcDir" value="src/launcher"/>
-	<property name="classDir" value="bin/launcher"/>
-	<property name="jarfile" value="ParamLauncher.jar"/>
+	<property name="launcherDir" value="src/incendium/launcher"/>
+	<property name="launcherSrc" value="${launcherDir}/src"/>
+	<property name="launcherClass" value="${launcherDir}/bin"/>
+	<property name="launcherJar" value="${launcherDir}/ParamLauncher.jar"/>
 	<property name="gameclient" value="AberothClient.jar"/>
 	
 	<target name="build">
-		<mkdir dir="${classDir}"/>
+		<mkdir dir="${launcherClass}"/>
 		<javac 
-			srcdir="${srcDir}"
-			destDir="${classDir}"
+			srcdir="${launcherSrc}"
+			destDir="${launcherClass}"
 			debug="true"
 			includeAntRuntime="false"
 			classpath=".;${gameclient}"
 		/>
 		<jar 
-			destfile="${jarfile}"
-			basedir="${classDir}"
+			destfile="${launcherJar}"
+			basedir="${launcherClass}"
 		>
 			<manifest>
 				<attribute name="Main-class" value="ParamLauncher"/>
-				<attribute name="Class-path" value="${gameclient}"/>
-				<attribute name="Extension-name" value=""/>
 			</manifest>
 			<service type="java.util.spi.ResourceBundleControlProvider" provider="DummyProvider"/>
 		</jar>
 	</target>
 	
 	<target name="clean">
-		<delete dir="${classDir}"/>
+		<delete dir="${launcherClass}"/>
 	</target>
 	
 	<target name="feierabend" description="Last build for the day :)">

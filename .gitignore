@@ -2,6 +2,9 @@
 !/Documents/*.pdf
 !/Documents/*.tex
 
-bin
+*.class
 AberothClient.jar
 
+**/AberothIncendium.egg-info
+**/__pycache__
+dist

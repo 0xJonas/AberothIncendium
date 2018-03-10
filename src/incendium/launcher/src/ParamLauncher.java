@@ -19,7 +19,7 @@ public class ParamLauncher {
 		{"playerName1",""},
 		{"password1",""},
 		{"showLogonDialog","true"},
-		{"numClient","1"},
+		{"numClients","1"},
 		{"delayBetweenClients","0"},
 		{"mouseAdjustX","0"},
 		{"mouseAdjustY","0"},
