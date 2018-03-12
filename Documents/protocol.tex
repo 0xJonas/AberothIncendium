@@ -350,7 +350,7 @@ This command is similar to the previous one, except that the \field{xPosition} a
 This allows for rectangles to be rendered \"between pixels\".
 
 \begin{bytelisting}
-0x0000 & Constant value 0x01 & byte \\
+0x0000 & Constant value 0x05 & byte \\
 0x0001 & \field{xPosition} & short \\
 0x0002 & \field{yPosition} & short \\
 \end{bytelisting}
@@ -506,7 +506,7 @@ This \field{textId} is used to display hint messages.
 The MOVE\_ON\_SCREEN\_TEXT command will update the position of text on the active subwindow.
 
 \begin{bytelisting}
-0x0000 & Constant value 0x08 & byte \\
+0x0000 & Constant value 0x09 & byte \\
 0x0001 & \field{textId} & short \\
 0x0003 & \field{xPosition} & short \\
 0x0005 & \field{yPosition} & short \\
@@ -750,5 +750,14 @@ but could theoretically be sent from any client:
 \item A \field{keyCode} value of 5 signals that the player is about to say something.
 \item A \field{keyCode} value of 6 signals that the player character should speak the current contents of the speech buffer.
 \end{itemize}
+
+\subsection{LOAD\_COLOR\_FROM\_CACHE Commands}
+All commands with an identifier not listed in any of the previous commands load a color from the cache. 
+
+\begin{bytelisting}
+0x0000 & \field{cacheId} & byte \\
+\end{bytelisting}
+
+After subtracting 30 from the \field{cacheId} field, the color at the corresponding index of the color cache is set as the active color.
 
 \end{document}
