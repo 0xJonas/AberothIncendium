@@ -187,7 +187,7 @@ events, but not for mouse movement.
 This message containes a list of commands to render one frame. They are executed in the order they are received.
 
 \begin{bytelisting}
-0x0000 & Constant value 0x0c & byte \\
+0x0000 & Constant value 0x17 & byte \\
 0x0001 & List of rendering commands & Command List \\
 \end{bytelisting}
 
@@ -196,7 +196,7 @@ The ONE\_FRAME\_WITH\_INFO message is similar to the \\
 ONE\_FRAME\_NO\_INFO message except that it also tests the users connection.
 
 \begin{bytelisting}
-0x0000 & Constant value 0x17 & byte \\
+0x0000 & Constant value 0x0c & byte \\
 0x0001 & List of rendering commands & Command List \\
 0x00nn & PING\_ID\_BANDWIDTH\_CHECK Command & Command \\
 \end{bytelisting}
@@ -324,7 +324,7 @@ Another of the DRAW\_FILLED\_RECT variants this time with a variable step size. 
 
 \begin{bytelisting}
 0x0000 & Constant value 0x02 & byte \\
-0x0000 & \field{delta} & byte \\
+0x0001 & \field{delta} & byte \\
 \end{bytelisting}
 
 \subsection{DRAW\_FILLED\_RECT\_AT\_DX Command}
@@ -332,7 +332,7 @@ The equivalent of the previous command for jumping to the right instead of down.
 
 \begin{bytelisting}
 0x0000 & Constant value 0x04 & byte \\
-0x0000 & \field{delta} & byte \\
+0x0001 & \field{delta} & byte \\
 \end{bytelisting}
 
 \subsection{DRAW\_FILLED\_RECT\_AT\_BLOCK\_XY Command}
@@ -362,7 +362,7 @@ This command is similar to the DRAW\_FILLED\_RECT\_AT\_Y\_PLUS\_ONE command, exc
 
 \begin{bytelisting}
 0x0000 & Constant value 0x1b & byte \\
-0x0000 & \field{repCount} & byte \\
+0x0001 & \field{repCount} & byte \\
 \end{bytelisting}
 
 This command executes a DRAW\_FILLED\_RECT\_AT\_Y\_PLUS\_ONE command as many times as specified by the \field{repCount} field.
