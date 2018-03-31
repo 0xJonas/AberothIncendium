@@ -711,7 +711,7 @@ class MouseInput(Command):
 		return 8;
 	
 	def __str__(self):#TODO fix
-		return "MOUSE_INPUT"# {0} at ({1},{2}) with button {4}".format(("pressed","released","moved","dragged")[self.action],self.x_pos,self.y_pos,self.button);
+		return "MOUSE_INPUT {0} at ({1},{2}) with button {3}".format(("pressed","released","moved","dragged")[self.action],self.x_pos,self.y_pos,self.button);
 
 class KeyboardInput(Command):
 	

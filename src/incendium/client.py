@@ -29,6 +29,12 @@ def SIMPLE_FORWARD(client,message):
 		return message;
 		
 def _pack_message(message_data,compress=False):
+	"""
+	Wraps a message with a size and compression field header.
+	
+	This function will always use compression if the compress-argument is set to True.
+	It will also use compression if the length of message_data is larger than 65535.
+	"""
 	length=len(message_data);
 	if length>0xffff or compress:
 		message_data=zlib.compress(message_data);
@@ -51,6 +57,9 @@ def _pack_message(message_data,compress=False):
 		return packet;
 
 def _unpack_message(packet):
+	"""
+	Extracts the message data from the raw data packet.
+	"""
 	message_data=packet[3:];
 	if packet[0]!=0xff:
 		message_data=zlib.decompress(message_data); #TODO check if actually compressed
@@ -95,6 +104,9 @@ def _connection_loop(client,to_server):
 	client.connected=False;
 		
 def _read_message(sock):
+	"""
+	Fetches a single message from the input socket.
+	"""
 	size_data=sock.recv(1);
 	if len(size_data)==0: #EOF
 		return None;
@@ -115,11 +127,15 @@ def _read_message(sock):
 	return size_data+message;
 	
 def _connect(client):
+	"""
+	Establishes the connection between client and server.
+	"""
 	server=socket.socket();
 	server.bind(("localhost",client.local_port));
 	server.listen();
 	select([server],[],[]);
 	client.conn_client=server.accept()[0]; #TODO save address
+	
 	client.conn_server=socket.socket();
 	client.conn_server.connect(("192.99.201.128",21103));
 	
@@ -138,13 +154,15 @@ def _connect(client):
 		pass;
 	
 def _send_handshake(client):
+	"""
+	Sends a handshake request to the server.
+	"""
 	#TODO Failure/password challenge handling
 	select([client.conn_client],[],[]);
 	login_string=b"";
 	while login_string.count(b"\x00")<12:
 		login_string+=client.conn_client.recv(1024);
 	
-	print(login_string);
 	login_params=_unpack_login_string(login_string);
 	func=client.on_login_handshake;
 	login_params=func(client,login_params);
@@ -153,6 +171,9 @@ def _send_handshake(client):
 	client.conn_server.send(login_string);
 	
 def _receive_handshake(client):
+	"""
+	Receives and interprets a handshake response.
+	"""
 	select([client.conn_server],[],[]);
 	response=b"";
 	while len(response)<2 or response.count(b"\x00",1)==0:
@@ -161,8 +182,6 @@ def _receive_handshake(client):
 	client.conn_client.send(response);
 	client.login_status=response[0];
 	client.login_response=response[1:len(response)-1];
-	print(response[0]);
-	print(response[1:]);
 	
 	select([client.conn_client],[],[]);
 	ack=b"";
@@ -171,6 +190,9 @@ def _receive_handshake(client):
 	client.conn_server.send(ack);
 	
 def _unpack_login_string(string):
+	"""
+	Creates a dictionary containing the parameters of the login string.
+	"""
 	login_fields=string.split(b"\x00");
 	return {
 			"playerName": login_fields[0],
@@ -188,6 +210,9 @@ def _unpack_login_string(string):
 		};
 	
 def _pack_login_string(login_params):
+	"""
+	Creates a login string from the contents of the given dictionary.
+	"""
 	login_string=b"";
 	login_string+=login_params["playerName"]+b"\x00";
 	login_string+=login_params["password"]+b"\x00";
@@ -259,7 +284,7 @@ class Client:
 		self._client_thread=threading.Thread(name="Aberoth Client",target=run_client);
 		self._client_thread.start();
 		
-		self.connect();
+		self.reconnect();
 	
 	def reconnect(self):
 		"""
@@ -280,13 +305,13 @@ class Client:
 	
 	def wait_for_connection(self,timeout=None):
 		"""
-		This function blocks until a connection between the client and the server has been established.
+		Blocks until a connection between the client and the server has been established.
 		"""
 		self._connection_thread.join(timeout=timeout);
 		
 	def send_to_server(self,message):
 		"""
-		Send a message to the server.
+		Send a message directly to the server.
 		"""
 		stream=io.BytesIO();
 		data.write_message(stream,message,warning=True);
@@ -296,7 +321,7 @@ class Client:
 	
 	def send_to_client(self,message):
 		"""
-		Send a message to the client.
+		Send a message directly to the client.
 		"""
 		stream=io.BytesIO();
 		data.write_message(stream,message,warning=True);
