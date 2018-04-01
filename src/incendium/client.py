@@ -7,6 +7,7 @@ import pkg_resources;
 import incendium.data as data;
 import incendium.messages as msg;
 import io;
+import os.path;
 from select import select;
 
 HANDSHAKE_MESSAGE_NONE=-1;
@@ -330,7 +331,7 @@ class Client:
 			self.conn_client.send(packet);
 		
 	def _get_launch_string(self,java_location,launcher_location,client_location):
-		launch=java_location+' "-Djava.ext.dirs=." -cp .;'+client_location+' -jar '+launcher_location;
+		launch='{0} "-Djava.ext.dirs={1}" -jar {2} {3}'.format(java_location,os.path.dirname(launcher_location),launcher_location,client_location);
 		launch+=" serverIpAddress localhost ";
 		launch+="serverPort "+str(self.local_port);
 		for (k,v) in self.launch_params.items():

@@ -1,15 +1,11 @@
 
-import java.util.ListResourceBundle;
-import java.util.jar.JarFile;
-import java.util.jar.JarEntry;
-import java.lang.reflect.Method;
-import java.lang.reflect.InvocationTargetException;
-import java.io.InputStream;
-import java.io.IOException;
+import java.io.File;
+import java.net.URLClassLoader;
+import java.net.URL;
 
 /**
 IMPORTANT:
-The jarfile has to be executed with the command 'java "-Djava.ext.dirs=." -jar ParamLauncher.jar <args>'
+The jarfile has to be executed with the command 'java "-Djava.ext.dirs=ParamLauncher.jar" -jar ParamLauncher.jar AberothClient.jar <args>'
 */
 public class ParamLauncher {
 	
@@ -46,7 +42,8 @@ public class ParamLauncher {
 	}
 	
 	public static void main(String[] args){
-		for(int i=0;i<args.length;i+=2){
+		String clientLocation=args[0];
+		for(int i=1;i<args.length;i+=2){
 			String key=args[i];
 			String value=args[i+1];
 			int index=indexOf(key);
@@ -54,6 +51,12 @@ public class ParamLauncher {
 				dummyResource[index][1]=value;
 			}
 		}
-		gameclient.GameClient.main(new String[0]);
+		try{
+			URLClassLoader ucl=new URLClassLoader(new URL[]{new File(clientLocation).toURI().toURL()});
+			Class<?> client=ucl.loadClass("gameclient.GameClient");
+			client.getMethod("main",String[].class).invoke(null,(Object) new String[0]);
+		}catch(Exception e){
+			e.printStackTrace();
+		}
 	}
 }

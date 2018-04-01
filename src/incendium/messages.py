@@ -755,4 +755,4 @@ class LoadColor(Command):
 		return 1;
 	
 	def __str__(self):
-		return "LOAD_COLOR_FROM_CACHE "+str(self.cache_id);
+		return "LOAD_COLOR_FROM_CACHE "+str(self.index);
