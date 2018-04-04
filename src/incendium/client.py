@@ -98,6 +98,13 @@ def _connection_loop(client,to_server):
 					processed_commands+=func(client,cmd);
 				m.command_list=processed_commands;
 				
+				#Process hotkeys
+				for cmd in m.command_list:
+					if cmd.get_id()==msg.KEYBOARD_INPUT_ID and cmd.action==msg.KeyboardInput.KEY_PRESSED:
+						if cmd.key_code in client.hotkeys:
+							func=client.hotkeys[cmd.key_code];
+							func(client);
+				
 			if to_server:
 				client.send_to_server(m);
 			else:
@@ -246,6 +253,7 @@ class Client:
 		self.on_message_to_server=SIMPLE_FORWARD;
 		self.on_command_to_client=SIMPLE_FORWARD;
 		self.on_command_to_server=SIMPLE_FORWARD;
+		self.hotkeys={};
 		
 		self.launch_params={
 				"playerName1": None,
@@ -329,6 +337,12 @@ class Client:
 		packet=_pack_message(stream.getvalue());
 		with self._conn_client_lock:
 			self.conn_client.send(packet);
+			
+	def add_hot_key(self,key,func):
+		self.hotkeys[key]=func;	#TODO Add ability to suppress key
+	
+	def clear_hot_key(self,key):
+		del self.hotkeys[key];
 		
 	def _get_launch_string(self,java_location,launcher_location,client_location):
 		launch='{0} "-Djava.ext.dirs={1}" -jar {2} {3}'.format(java_location,os.path.dirname(launcher_location),launcher_location,client_location);

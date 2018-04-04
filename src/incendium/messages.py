@@ -39,6 +39,33 @@ RESOURCE_TYPE_STOP_SOUND_EFFECT_ID=0x06;
 MOUSE_INPUT_ID=0x13;
 KEYBOARD_INPUT_ID=0x10;
 
+#TODO add more keys
+key_codes={
+	"cancel": 3,
+	"backspace": 8,
+	"tab": 9,
+	"clear": 12,
+	"shift": 16,
+	"control": 17,
+	"alt": 18,
+	"capslock": 20,
+	"escape": 27,
+	"convert": 28,
+	"space": 32,
+	"home": 36,
+	"left": 37,
+	"up": 38,
+	"right": 39,
+	"down": 40,
+	
+};
+for i in range(44,58):
+	key_codes[chr(i)]=i;
+for i in range(65,91):	#a - z
+	key_codes[chr(i+32)]=i;
+for i in range(112,124): #F1 - F12
+	key_codes["f"+chr(i-111)]=i;
+
 class Command:
 
 	def __init__(self,time=-1):
