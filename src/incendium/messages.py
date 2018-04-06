@@ -44,6 +44,7 @@ key_codes={
 	"cancel": 3,
 	"backspace": 8,
 	"tab": 9,
+	"enter": 10,
 	"clear": 12,
 	"shift": 16,
 	"control": 17,

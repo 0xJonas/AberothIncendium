@@ -235,11 +235,18 @@ def _pack_login_string(login_params):
 	login_string+=login_params["graphicsMemory"]+b"\x00";
 	login_string+=login_params["signature"]+b"\x00";
 	return login_string;
+	
+_next_local_port=21102;
+
+def _get_next_local_port():
+	global _next_local_port;
+	_next_local_port+=1;
+	return _next_local_port;
 		
 class Client:
 
 	def __init__(self):
-		self.local_port=21103;
+		self.local_port=_get_next_local_port();
 		self.client_location="./AberothClient.jar";
 		self.connected=False;
 		self.login_status=HANDSHAKE_MESSAGE_NONE;
@@ -316,6 +323,8 @@ class Client:
 		"""
 		Blocks until a connection between the client and the server has been established.
 		"""
+		while self._connection_thread==None:
+			pass;
 		self._connection_thread.join(timeout=timeout);
 		
 	def send_to_server(self,message):
@@ -337,6 +346,21 @@ class Client:
 		packet=_pack_message(stream.getvalue());
 		with self._conn_client_lock:
 			self.conn_client.send(packet);
+			
+	def send_key_input(self,key,action):
+		input_cmd=msg.KeyboardInput(key,action);
+		input_msg=msg.UserInput(1,[input_cmd]);
+		self.send_to_server(input_msg);
+	
+	def send_text(self,text):
+		cmd_list=[msg.KeyboardInput(msg.key_codes["enter"],msg.KeyboardInput.KEY_TYPED)];
+		for c in text:
+			cmd_list.append(msg.KeyboardInput(ord(c),msg.KeyboardInput.KEY_TYPED));
+		cmd_list.append(msg.KeyboardInput(msg.key_codes["enter"],msg.KeyboardInput.KEY_TYPED));
+		input_msg=msg.UserInput(1,cmd_list);
+		self.send_to_server(input_msg);
+	
+	#TODO send_mouse_input
 			
 	def add_hot_key(self,key,func):
 		self.hotkeys[key]=func;	#TODO Add ability to suppress key
