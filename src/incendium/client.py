@@ -246,6 +246,10 @@ def _get_next_local_port():
 class Client:
 
 	def __init__(self):
+		"""
+		Creates a new instance of Client
+		"""
+		#Connection params
 		self.local_port=_get_next_local_port();
 		self.client_location="./AberothClient.jar";
 		self.connected=False;
@@ -261,6 +265,23 @@ class Client:
 		self.on_command_to_client=SIMPLE_FORWARD;
 		self.on_command_to_server=SIMPLE_FORWARD;
 		self.hotkeys={};
+		
+		#Client state params
+		self.width=0;
+		self.height=0;
+		self.colors=[];
+		self.rect_width=0;
+		self.rect_height=0;
+		self.round_up_x=False;
+		self.round_up_y=False;
+		self.red=0;
+		self.green=0;
+		self.blue=0;
+		self.alpha=0xff;
+		self.resource_cache=[];
+		self.active_subwindow=0;
+		self.previous_subwindow=0;
+		self.subwindows=[];
 		
 		self.launch_params={
 				"playerName1": None,
@@ -278,6 +299,7 @@ class Client:
 				"logCommandPercentages": None
 			};
 		
+		#private
 		self._client_process=None;
 		self._conn_server_lock=threading.Lock();
 		self._conn_client_lock=threading.Lock();
@@ -376,3 +398,122 @@ class Client:
 			if v:
 				launch+=" "+k+" "+str(v);
 		return launch;
+		
+	def _process_message(self,message):
+		if message.get_id()==msg.CREATE_WINDOW_ID:
+			self.width=msg.width;
+			self.height=msg.height;
+			self.subwindows=[_SubWindow(0,0,0,msg.width,msg.height)];
+			self.colors=[];
+			self.rect_width=0;
+			self.rect_height=0;
+			self.round_up_x=False;
+			self.round_up_y=False;
+			self.red=0;
+			self.green=0;
+			self.blue=0;
+			self.alpha=0xff;
+			self.resource_cache=[];
+			self.active_subwindow=0;
+			self.previous_subwindow=0;
+		elif message.get_id()==msg.ONE_FRAME_NO_INFO or message.get_id()==msg.ONE_FRAME_WITH_INFO_ID:
+			for cmd in message.command_list:
+				self._process_command(cmd);
+			pass;
+		pass;
+		
+	def _process_command(self,command):
+		command_id=command.get_id();
+		if command_id==msg.SET_FILLED_RECT_SIZE_ID:
+			self.rect_width=command.width;
+			self.rect_height=command.height;
+			self.round_up_x=command.round_up_x;
+			self.round_up_y=command.round_up_y;
+		elif command_id==msg.SET_COLOR_ID:
+			self.red=command.red;
+			self.green=command.green;
+			self.blue=command.blue;
+			self.alpha=0xff;
+		elif command_id==msg.SET_COLOR_WITH_ALPHA_ID:
+			self.red=command.red;
+			self.green=command.green;
+			self.blue=command.blue;
+			self.alpha=command.alpha;
+		elif command_id==msg.CACHE_CURRENT_COLOR_ID:
+			self.colors[command.index]=(self.red,self.green,self.blue,self.alpha);
+		elif command_id==msg.SET_COLOR_BASED_ON_CACHE:
+			if self.colors[command.index]:
+				color=self.colors[command.index];
+				self.red=color[0]+command.red_delta;
+				self.green=color[1]+command.green_delta;
+				self.blue=color[2]+command.blue_delta;
+				self.alpha=0xff;
+		elif command_id==msg.SET_ON_SCREEN_TEXT_ID:
+			subwindow=self.subwindows[self.active_subwindow];
+			if command.text_id==msg.SetOnScreenText.TEXT_ID_CLEAR:
+				subwindow.strings=[];
+			else:
+				subwindow.strings[text_id]=_OnScreenText(command.text_id,command.x_pos,command.y_pos,command.line_shift,command.style,command.font,command.content);
+		elif command_id==msg.MOVE_ON_SCREEN_TEXT_ID:
+			text=self.subwindows[self.active_subwindow].strings[command.text_id];
+			text.x_pos=command.x_pos;
+			text.y_pos=command.y_pos;
+			text.line_shift=command.line_shift;
+		elif command_id==msg.SUB_WINDOW_ID:
+			sub_command=command.sub_command;
+			if sub_command==msg.CREATE_SUB_WINDOW:
+				self.subwindows[command.subwindow_id]=_SubWindow(command.subwindow_id,command.x_pos,command.y_pos,command.width,command.height);
+				self.previous_subwindow=self.active_subwindow;
+				self.active_subwindow=command.subwindow_id;
+			if sub_command==msg.SWITCH_TO_SUB_WINDOW:
+				self.previous_subwindow=self.active_subwindow;
+				self.active_subwindow=command.subwindow_id;
+			if sub_command==msg.SWITCH_BACK_TO_PREVIOUS_SUB_WINDOW:
+				temp=self.active_subwindow;
+				self.active_subwindow=self.previous_subwindow;
+				self.previous_subwindow=temp;
+			if sub_command==msg.DESTROY_SUB_WINDOW:
+				self.subwindows[command.subwindow_id]=None;
+		elif command_id==msg.USE_GLOBAL_RESOURCE_ID:
+			sub_command=command.sub_command;
+			if sub_command==msg.RESOURCE_TYPE_PNG_ID:
+				self.resource_cache[command.resource_id]=_Resource(command.resource_id,msg.RESOURCE_TYPE_PNG_ID,command.png_data);
+			if sub_command==msg.RESOURCE_IMAGE_RAW_ID:
+				self.resource_cache[command.resource_id]=_Resource(command.resource_id,msg.RESOURCE_TYPE_IMAGE_RAW_ID,command.rgb_data);
+			if sub_command==msg.RESOURCE_SOUND_EFFECT_ID:
+				self.resource_cache[command.resource_id]=_Resource(command.resource_id,msg.RESOURCE_TYPE_SOUND_EFFECT_ID,command.name);
+		elif isinstance(command,msg.LoadColor):
+			if self.colors[command.index]:
+				color=self.colors[command.index];
+				self.red=color[0];
+				self.green=color[1];
+				self.blue=color[2];
+				self.alpha=color[3];
+
+class _SubWindow:
+	
+	def __init__(self,id,x,y,width,height):
+		self.subwindow_id=id;
+		self.x_pos=x;
+		self.y_pos=y;
+		self.width=width;
+		self.height=height;
+		self.strings=[];
+		
+class _OnScreenText:
+	
+	def __init__(self,id,x,y,line_shift,style,font,content):
+		self.text_id=id;
+		self.x_pos=x;
+		self.y_pos=y;
+		self.line_shift=line_shift;
+		self.style=style;
+		self.font=font;
+		self.content=content;
+
+class _Resource:
+	
+	def __init(self,id,type,data):
+		self.resource_id=id;
+		self.type=type;
+		self.data=data;

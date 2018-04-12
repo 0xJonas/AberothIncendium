@@ -114,8 +114,10 @@ def write_message(stream,message,warning=True):
 			write_command(stream,command,warning=warning);
 		write_command(stream,message.ping_command,warning=warning);
 	elif message.get_id()==msg.USER_INPUT_ID:
-		write_byte(stream,message.window_id,warning=warning);
+		#write_byte(stream,message.window_id,warning=warning);
+		write_byte(stream,255,warning=warning);
 		length=len(message.command_list);
+		#length=2;
 		write_byte(stream,(length>>16) & 0xff,warning);
 		write_byte(stream,(length>>8) & 0xff,warning);
 		write_byte(stream,length & 0xff,warning);

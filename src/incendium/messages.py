@@ -612,7 +612,7 @@ class ResourceImageRaw(UseGlobalResource):
 		self.y_pos=y_pos;
 		self.width=width;
 		self.height=height;
-		self.rgb_data=png_data;
+		self.rgb_data=rgb_data;
 		
 	def __len__(self):
 		return 12+len(rgb_data);
