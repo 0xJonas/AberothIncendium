@@ -269,7 +269,7 @@ class Client:
 		#Client state params
 		self.width=0;
 		self.height=0;
-		self.colors=[];
+		self.colors={};
 		self.rect_width=0;
 		self.rect_height=0;
 		self.round_up_x=False;
@@ -278,10 +278,10 @@ class Client:
 		self.green=0;
 		self.blue=0;
 		self.alpha=0xff;
-		self.resource_cache=[];
+		self.resource_cache={};
 		self.active_subwindow=0;
 		self.previous_subwindow=0;
-		self.subwindows=[];
+		self.subwindows={};
 		
 		self.launch_params={
 				"playerName1": None,
@@ -337,8 +337,7 @@ class Client:
 		Closes the client.
 		"""
 		if makecamp:
-			#TODO
-			pass;
+			self.send_text("save");
 		self._client_process.terminate();
 	
 	def wait_for_connection(self,timeout=None):
@@ -368,6 +367,7 @@ class Client:
 		packet=_pack_message(stream.getvalue());
 		with self._conn_client_lock:
 			self.conn_client.send(packet);
+			self._process_message(message);
 			
 	def send_key_input(self,key,action):
 		input_cmd=msg.KeyboardInput(key,action);
@@ -401,10 +401,10 @@ class Client:
 		
 	def _process_message(self,message):
 		if message.get_id()==msg.CREATE_WINDOW_ID:
-			self.width=msg.width;
-			self.height=msg.height;
-			self.subwindows=[_SubWindow(0,0,0,msg.width,msg.height)];
-			self.colors=[];
+			self.width=message.width;
+			self.height=message.height;
+			self.subwindows={0: _SubWindow(0,0,0,message.width,message.height)};
+			self.colors={};
 			self.rect_width=0;
 			self.rect_height=0;
 			self.round_up_x=False;
@@ -413,10 +413,10 @@ class Client:
 			self.green=0;
 			self.blue=0;
 			self.alpha=0xff;
-			self.resource_cache=[];
+			self.resource_cache={};
 			self.active_subwindow=0;
 			self.previous_subwindow=0;
-		elif message.get_id()==msg.ONE_FRAME_NO_INFO or message.get_id()==msg.ONE_FRAME_WITH_INFO_ID:
+		elif message.get_id()==msg.ONE_FRAME_NO_INFO_ID or message.get_id()==msg.ONE_FRAME_WITH_INFO_ID:
 			for cmd in message.command_list:
 				self._process_command(cmd);
 			pass;
@@ -441,7 +441,7 @@ class Client:
 			self.alpha=command.alpha;
 		elif command_id==msg.CACHE_CURRENT_COLOR_ID:
 			self.colors[command.index]=(self.red,self.green,self.blue,self.alpha);
-		elif command_id==msg.SET_COLOR_BASED_ON_CACHE:
+		elif command_id==msg.SET_COLOR_BASED_ON_CACHE_ID:
 			if self.colors[command.index]:
 				color=self.colors[command.index];
 				self.red=color[0]+command.red_delta;
@@ -451,9 +451,9 @@ class Client:
 		elif command_id==msg.SET_ON_SCREEN_TEXT_ID:
 			subwindow=self.subwindows[self.active_subwindow];
 			if command.text_id==msg.SetOnScreenText.TEXT_ID_CLEAR:
-				subwindow.strings=[];
+				subwindow.strings={};
 			else:
-				subwindow.strings[text_id]=_OnScreenText(command.text_id,command.x_pos,command.y_pos,command.line_shift,command.style,command.font,command.content);
+				subwindow.strings[command.text_id]=_OnScreenText(command.text_id,command.x_pos,command.y_pos,command.line_shift,command.style,command.font,command.content);
 		elif command_id==msg.MOVE_ON_SCREEN_TEXT_ID:
 			text=self.subwindows[self.active_subwindow].strings[command.text_id];
 			text.x_pos=command.x_pos;
@@ -461,26 +461,26 @@ class Client:
 			text.line_shift=command.line_shift;
 		elif command_id==msg.SUB_WINDOW_ID:
 			sub_command=command.sub_command;
-			if sub_command==msg.CREATE_SUB_WINDOW:
+			if sub_command==msg.CREATE_SUB_WINDOW_ID:
 				self.subwindows[command.subwindow_id]=_SubWindow(command.subwindow_id,command.x_pos,command.y_pos,command.width,command.height);
 				self.previous_subwindow=self.active_subwindow;
 				self.active_subwindow=command.subwindow_id;
-			if sub_command==msg.SWITCH_TO_SUB_WINDOW:
+			if sub_command==msg.SWITCH_TO_SUB_WINDOW_ID:
 				self.previous_subwindow=self.active_subwindow;
 				self.active_subwindow=command.subwindow_id;
-			if sub_command==msg.SWITCH_BACK_TO_PREVIOUS_SUB_WINDOW:
+			if sub_command==msg.SWITCH_BACK_TO_PREVIOUS_SUB_WINDOW_ID:
 				temp=self.active_subwindow;
 				self.active_subwindow=self.previous_subwindow;
 				self.previous_subwindow=temp;
-			if sub_command==msg.DESTROY_SUB_WINDOW:
+			if sub_command==msg.DESTROY_SUB_WINDOW_ID:
 				self.subwindows[command.subwindow_id]=None;
 		elif command_id==msg.USE_GLOBAL_RESOURCE_ID:
 			sub_command=command.sub_command;
 			if sub_command==msg.RESOURCE_TYPE_PNG_ID:
 				self.resource_cache[command.resource_id]=_Resource(command.resource_id,msg.RESOURCE_TYPE_PNG_ID,command.png_data);
-			if sub_command==msg.RESOURCE_IMAGE_RAW_ID:
+			if sub_command==msg.RESOURCE_TYPE_IMAGE_RAW_ID:
 				self.resource_cache[command.resource_id]=_Resource(command.resource_id,msg.RESOURCE_TYPE_IMAGE_RAW_ID,command.rgb_data);
-			if sub_command==msg.RESOURCE_SOUND_EFFECT_ID:
+			if sub_command==msg.RESOURCE_TYPE_SOUND_EFFECT_ID:
 				self.resource_cache[command.resource_id]=_Resource(command.resource_id,msg.RESOURCE_TYPE_SOUND_EFFECT_ID,command.name);
 		elif isinstance(command,msg.LoadColor):
 			if self.colors[command.index]:
@@ -498,7 +498,7 @@ class _SubWindow:
 		self.y_pos=y;
 		self.width=width;
 		self.height=height;
-		self.strings=[];
+		self.strings={};
 		
 class _OnScreenText:
 	
@@ -513,7 +513,7 @@ class _OnScreenText:
 
 class _Resource:
 	
-	def __init(self,id,type,data):
+	def __init__(self,id,type,data):
 		self.resource_id=id;
 		self.type=type;
 		self.data=data;
