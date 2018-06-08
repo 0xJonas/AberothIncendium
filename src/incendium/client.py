@@ -375,10 +375,10 @@ class Client:
 		self.send_to_server(input_msg);
 	
 	def send_text(self,text):
-		cmd_list=[msg.KeyboardInput(msg.key_codes["enter"],msg.KeyboardInput.KEY_TYPED)];
+		cmd_list=[msg.KeyboardInput(msg.KeyboardInput.SPECIAL_START_SPEECH,msg.KeyboardInput.KEY_SPECIAL)];
 		for c in text:
-			cmd_list.append(msg.KeyboardInput(ord(c),msg.KeyboardInput.KEY_TYPED));
-		cmd_list.append(msg.KeyboardInput(msg.key_codes["enter"],msg.KeyboardInput.KEY_TYPED));
+			cmd_list.append(msg.KeyboardInput(ord(c),msg.KeyboardInput.KEY_SPEECH));
+		cmd_list.append(msg.KeyboardInput(msg.KeyboardInput.SPECIAL_FINISH_SPEECH,msg.KeyboardInput.KEY_SPECIAL));
 		input_msg=msg.UserInput(1,cmd_list);
 		self.send_to_server(input_msg);
 	

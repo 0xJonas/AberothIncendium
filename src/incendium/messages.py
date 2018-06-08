@@ -38,6 +38,7 @@ RESOURCE_TYPE_MOVE_SOUND_EFFECT_ID=0x04;
 RESOURCE_TYPE_STOP_SOUND_EFFECT_ID=0x06;
 MOUSE_INPUT_ID=0x13;
 KEYBOARD_INPUT_ID=0x10;
+DATA_INPUT_ID=0x11;
 
 #TODO add more keys
 key_codes={
@@ -769,6 +770,20 @@ class KeyboardInput(Command):
 	
 	def __str__(self):
 		return "KEYBOARD_INPUT action {0}, key {1}".format(self.action,self.key_code);
+		
+class DataInput(Command):
+	
+	def __init__(self,data,time=-1):
+		self.data=data;
+	
+	def get_id(self):
+		return KEYBOARD_INPUT_ID;
+		
+	def __len__(self):
+		return 3+len(data);
+	
+	def __str__(self):
+		return "DATA_INPUT "+self.data;
 		
 class LoadColor(Command):
 	

@@ -87,7 +87,9 @@ def read_message(stream):
 	elif message_id==msg.CLIENT_STATUS_ID:
 		status=read_short(stream);
 		return msg.ClientStatus(status);
-	#Todo default
+	else:
+		print("unknown message!");
+		print(stream.read());
 
 def write_message(stream,message,warning=True):
 	write_byte(stream,message.get_id());
@@ -278,6 +280,9 @@ def read_command(stream):
 		key_code=read_byte(stream);
 		action=read_byte(stream);
 		return msg.KeyboardInput(key_code,action);
+	elif command_id==msg.DATA_INPUT_ID:
+		data=read_string();
+		return msg.DataInput(data);
 	else:
 		return msg.LoadColor(command_id-30);
 	
@@ -414,5 +419,7 @@ def write_command(stream,command,warning=True):
 	elif command_id==msg.KEYBOARD_INPUT_ID:
 		write_byte(stream,command.key_code,warning);
 		write_byte(stream,command.action,warning);
+	elif command_id==msg.DATA_INPUT_ID:
+		write_string(stream,command.data);
 	else:
 		pass;

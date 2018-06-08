@@ -1,5 +1,6 @@
 \documentclass{article}
 \usepackage{xcolor}
+\usepackage{graphicx}
 
 \definecolor{fieldColor}{RGB}{160, 26, 204}
 \newcommand{\field}[1]{\textcolor{fieldColor}{\texttt{#1}}}
@@ -15,7 +16,7 @@
 
 \section{Disclaimer}
 Please use the information contained in this document responsibly.\\
-This document is highly incomplete and speculative. Expect corrections and additions in the future. 
+This document is based on personal research and might contain errors.
 
 \section{Data Type Conventions}
 Various data types are used in this document for clarifying the contents of the server messages and commands. These include basic types like single bytes as well as more complex ones like strings.
@@ -35,8 +36,8 @@ actual commands.
 %=========================================
 
 \section{Protocol Structure}
-The basic protocol structure consists of chunks which contain the server messages. Each chunk begins with the \field{compressionFlag} followed by two bytes stating the length of the following data.
-Depending on the value of the \field{compressionFlag}, this data might be ZIP-compressed. If the \field{compressionFlag} has the value 0xff, the data is sent uncompressed otherwise ZIP-compression is used.
+The basic protocol structure consists of packets which contain the server messages. Each packets begins with the \field{compressionFlag} followed by two bytes stating the length of the following data.
+Depending on the value of the \field{compressionFlag}, this data might be ZIP-compressed (using DEFLATE). If the \field{compressionFlag} has the value 0xff, the data is sent uncompressed otherwise ZIP-compression is used.
 In the last case, the \field{compressionFlag} is also used as part of the \field{messageSize} field.
 
 \begin{bytelisting}
@@ -53,6 +54,10 @@ The different messages are covered in detail in a later part of this document.
 0x0000 & Message identifier & byte \\
 0x0001 & Message content & Data\\
 \end{bytelisting}
+
+Here is an example of a packet that contains the ONE\_FRAME\_NO\_INFO message with three commands:\\
+\\
+\includegraphics{packet_structure.png}
 
 \subsection{Logging in}
 There is one exception to the above structure, which is the login handshake. To log in, the client sends all the required information to the server in form of a single string.
@@ -83,7 +88,7 @@ data. The following status values are accepted by the client:
 
 \begin{itemize}
 \item A value of 0 indicates that an error has occured during the login. The data string can contain some memorable and helpful lines such as "Error! Please and try again later" [sic].
-\item A value of 1 means that the login was successful. After this message, the server will start sending messages in the stardard protocol structure.
+\item A value of 1 means that the login was successful. The client has to acknowledge this message by sending a 0 to the server. After the 0 was received, the server will start sending messages in the stardard protocol structure.
 \item A value of 2 means that the message inside the data string should be displayed to the player.
 \item A value of 3 means that the server is full and the player is queued up to enter.
 \item A value of 4 means that the server is full and too many players are already queued up.
@@ -303,6 +308,11 @@ pseudorandom numbers.
 The \field{echoLength} field determines how long the response to this command should be. A value of 1 means that the response should be 1 kiB (1024 Byte) in length. A
 value of 2 means the length should be 2 kiB (2048 Byte) and a value of 3 means 4 kiB (4096 Byte). Any other value causes the length to be 0 and an empty FRAME\_RECEIVED message will be sent.
 The only exception to this is when the \field{echoLength} field itself is 0, in which case no respose will be sent.
+The unknown fields are probably a timestamp for when the command was sent from the server.
+
+Interestingly, the server does not send this command properly. The mistake is, that the \field{echoLength} field is sent as the first field by the server, but read as the third by the client. This causes the client to
+read one of the unknown fields instead, which most of the time is not in the range required to trigger a meaningfull response. The Consequence of that error is, that the client almost never sends a proper
+FRAME\_RECEIVED message to the client.
 
 \subsection{DRAW\_FILLED\_RECT\_AT\_Y\_PLUS\_ONE Command}
 This is one of the many commands that draw a rectangle on the screen. This variant moves the drawing cursor down one step and then fills a rectangle of the previously set size with the active subwindow's 
@@ -750,6 +760,16 @@ but could theoretically be sent from any client:
 \item A \field{keyCode} value of 5 signals that the player is about to say something.
 \item A \field{keyCode} value of 6 signals that the player character should speak the current contents of the speech buffer.
 \end{itemize}
+
+\subsection{DATA\_INPUT Command}
+This command is unused by any client. It is unknown what it does.
+
+\begin{bytelisting}
+0x0000 & Constant value 0x11 & byte \\
+0x0000 & \field{data} & String \\
+\end{bytelisting}
+
+This command can be send as part of a USER\_INPUT message. However, it is not know what effects the value of \field{data} has, if any.
 
 \subsection{LOAD\_COLOR\_FROM\_CACHE Commands}
 All commands with an identifier not listed in any of the previous commands load a color from the cache. 
